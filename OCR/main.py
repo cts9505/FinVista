@@ -42,32 +42,56 @@ def parse_transaction_data(text):
         if not line.strip():
             continue
         
-        # Skip lines that are primarily about months
-        is_month_line = False
-        for month in MONTHS:
-            if month.lower() in line.lower():
-                is_month_line = True
-                break
-                
-        if is_month_line:
+        # Skip lines that are monthly summaries (year + month name)
+        if re.search(r'\b20\d{2}\b', line) and any(month.lower() in line.lower() for month in MONTHS):
             continue
             
-        # Create a transaction dictionary
+        # Create a transaction dictionary with fields in the desired order
         transaction = {}
         
         # Check for '+' symbol anywhere in the line (for credit status)
         is_credited = '+' in line
         
+        # Clean line by removing + for name extraction
+        clean_line = line.replace('+', '')
+        
+        # Extract the name/title - exclude any single letter at the beginning
+        name_match = re.search(r'^(?:[A-Z]\s)?((?:[A-Z][a-zA-Z]*(?:\s[A-Za-z]+)*)+)', clean_line)
+        if name_match:
+            transaction['name'] = name_match.group(1).strip()
+        else:
+            # If that pattern didn't work, try to extract any capitalized words
+            name_match = re.search(r'([A-Z][a-zA-Z]*(?:\s[A-Za-z]+)*)', clean_line)
+            if name_match:
+                transaction['name'] = name_match.group(1).strip()
+            else:
+                transaction['name'] = "Unknown"
+        
+        # Extract date information (e.g., "1 April" or "31 March")
+        date_match = re.search(r'(\d{1,2}\s(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))', clean_line, re.IGNORECASE)
+        if date_match:
+            transaction['date'] = date_match.group(1)
+        else:
+            transaction['date'] = "Unknown"
+        
         # Extract the amount (any number with optional commas and decimal places)
-        amount_match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d+)?)', line)
+        amount_match = re.search(r'(₹\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{1,3}(?:,\d{3})*(?:\.\d+)?)', line)
         if amount_match:
             # Keep the original format with commas
-            transaction['amount'] = amount_match.group(1)
+            amount = amount_match.group(1)
+            # Add the ₹ symbol if it's not present
+            if not amount.startswith('₹'):
+                amount = '₹' + amount
+            transaction['amount'] = amount
         else:
             continue  # Skip if no amount found
         
         # Set the status based on '+' presence
         transaction['status'] = 'credited' if is_credited else 'debited'
+        
+        # Check for 'Failed' status indicator
+        if 'failed' in line.lower():
+            transaction['status'] = 'failed'
         
         # Extract any emojis from the line
         emoji_pattern = re.compile("["
@@ -90,28 +114,13 @@ def parse_transaction_data(text):
         emojis = emoji_pattern.findall(line)
         if emojis:
             transaction['emoji'] = ''.join(emojis)
-        
-        # Clean line by removing + for name extraction
-        clean_line = line.replace('+', '')
-        
-        # Extract the name/title - exclude any single letter at the beginning
-        name_match = re.search(r'^(?:[A-Z]\s)?((?:[A-Z][a-zA-Z]*(?:\s[A-Za-z]+)*)+)', clean_line)
-        if name_match:
-            transaction['name'] = name_match.group(1).strip()
-        else:
-            # If that pattern didn't work, try to extract any capitalized words
-            name_match = re.search(r'([A-Z][a-zA-Z]*(?:\s[A-Za-z]+)*)', clean_line)
-            if name_match:
-                transaction['name'] = name_match.group(1).strip()
-            else:
-                transaction['name'] = "Unknown"
             
         transactions.append(transaction)
     
     return transactions
 
 def save_to_json(transactions, output_file='transactions.json'):
-    with open(output_file, 'w') as f:
+    with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transactions, f, indent=4, ensure_ascii=False)  # ensure_ascii=False to preserve emojis
     print(f"Transaction data saved to {output_file}")
 
@@ -122,14 +131,15 @@ def main():
     
     # Use a more specific prompt to guide the model
     prompt = """
-    Extract all transaction information from this image, including any emojis. 
+    Extract all transaction information from this image, including dates, any emojis, and failed status.
     For each transaction line, identify:
     1. The person/business name
-    2. The transaction amount
-    3. Whether it's a credit (+) or debit
-    4. Any emojis or status indicators
+    2. The transaction date (e.g., "1 April", "31 March")
+    3. The transaction amount (with ₹ symbol)
+    4. Whether it's a credit (+) or debit
+    5. Any status indicators like "Failed"
     
-    IGNORE any entries that are just month names, dates, or monthly summaries.
+    IGNORE any entries that are just year+month headers (like "2025 April" or "2025 March").
     """
     
     text = extract_text_from_image(sample_file, prompt)
