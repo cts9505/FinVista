@@ -40,6 +40,11 @@ const IncomeSchema = new mongoose.Schema({
         maxLength: 50,
         trim: true
     },
+    status: {
+        type: String,
+        enum: ['pending', 'verified'],
+        default: 'verified'
+    },
 }, {timestamps: true})
 
 const IncomeModel = mongoose.model('Income', IncomeSchema);

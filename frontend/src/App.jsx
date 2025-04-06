@@ -24,6 +24,7 @@ import OnboardingPage from './pages/OnboardingPage'
 import ProfilePage from './pages/Profile'
 import ChatPage from './pages/Chat'
 import PortfolioDashboard from './pages/Portfolio'
+import ReceiptScanner from './pages/TransactionUpload'
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 	const GoogleWrapper = ()=>(
@@ -53,6 +54,7 @@ function App() {
         <Route path="/onboarding" element={<OnboardingPage/>}/>
         <Route path="/profile" element={<ProfilePage/>}/>
         <Route path='/chat' element={<ChatPage/>}/>
+        <Route path='/transaction-upload' element={<ReceiptScanner/>}/>
         <Route path='/portfolio' element={<PortfolioDashboard/>}/>
         <Route path="*" element={<NotFound />} />
       </Routes>

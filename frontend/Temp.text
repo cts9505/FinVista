@@ -1,0 +1,1253 @@
+import React, { useState, useEffect } from 'react';
+import { useGlobalContext } from '../context/GlobalContext';
+import { 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+} from 'recharts';
+import { PlusCircle, FileText, CheckCircle, X, Clock, Edit2, Trash2 } from 'lucide-react';
+import Sidebar from '../components/Sidebar';
+
+// Emoji picker component
+const EmojiPicker = ({ onSelect }) => {
+    const emojis = [
+        '💰', '💵', '🏠', '🚗', '🍔', '👕', '💻', '🎮', '🎬', '🎓', 
+        '🏥', '✈️', '🎁', '🛒', '📱', '🐶', '🍎', '👶', '💄', '🛠️'
+    ];
+
+    return (
+        <div className="grid grid-cols-5 gap-2 p-2 bg-white border rounded">
+            {emojis.map((emoji) => (
+                <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => onSelect(emoji)}
+                    className="text-2xl hover:bg-gray-100 rounded p-1"
+                >
+                    {emoji}
+                </button>
+            ))}
+        </div>
+    );
+};
+
+const BudgetPage = () => {
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    
+    const { 
+        addBudget,
+        updateBudget,
+        deleteBudget,
+        getBudgets,
+        budgets,
+        expenses,
+        getExpenses
+    } = useGlobalContext();
+
+    // States
+    // 1. First, add these new states to the top of the BudgetPage component:
+    const [useCurrentStartDate, setUseCurrentStartDate] = useState(true);
+    const [budgetEndType, setBudgetEndType] = useState('auto'); // 'auto' or 'specific'
+    const [manualStartDate, setManualStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [manualEndDate, setManualEndDate] = useState(
+    new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]);
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [currentEditBudget, setCurrentEditBudget] = useState(null);
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [showActiveOnly, setShowActiveOnly] = useState(true);
+    const [autoRenewalEnabled, setAutoRenewalEnabled] = useState(true);
+    const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    
+    const [inputState, setInputState] = useState({
+        title: '',
+        amount: '',
+        category: '',
+        emoji: '💰',
+        period: 'monthly',
+        autoRenew: true
+    });
+
+    const { title, amount, category, emoji, period, autoRenew } = inputState;
+    
+    // Calculate months for dropdown
+    const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    // Budget period options
+    const periodOptions = [
+        { value: 'monthly', label: 'Monthly' },
+        { value: 'quarterly', label: 'Quarterly' },
+        { value: 'biannual', label: 'Half Yearly' },
+        { value: 'annual', label: 'Yearly' }
+    ];
+
+    // Category options
+    const categoryOptions = [
+        { value: 'Essentials & Living', label: 'Essentials & Living' },
+        { value: 'Loans & EMI', label: 'Loans & EMI\'s' },
+        { value: 'Transportation', label: 'Transportation & Mobility' },
+        { value: 'Entertainment', label: 'Lifestyle & Entertainment' },
+        { value: 'Other', label: 'Gifts, Donations & Miscellaneous' }
+    ];
+    useEffect(() => {
+        getBudgets();
+        getExpenses();
+    }, []);
+    
+    useEffect(() => {
+        console.log("Fetching expenses..." ,expenses);
+        console.log("Fetching budgets..." ,budgets);
+        if (expenses && budgets) {
+            console.log("DEBUGGING EXPENSE MATCHING:");
+            
+            // Log a sample budget and try to find matching expenses
+            if (budgets.length > 0) {
+                const sampleBudget = budgets[0];
+                console.log("Sample budget:", sampleBudget);
+                
+                const startDate = new Date(sampleBudget.startDate);
+                const endDate = new Date(sampleBudget.endDate);
+                
+                console.log("Budget category:", sampleBudget.category);
+                console.log("Budget period:", startDate, "to", endDate);
+                
+                // Find matching expenses
+                const matchingExpenses = expenses.filter(expense => {
+                    // Convert date if needed
+                    let expenseDate = expense.date;
+                    if (!(expenseDate instanceof Date)) {
+                        expenseDate = new Date(expense.date);
+                    }
+                    
+                    const categoryMatch = expense.category.toLowerCase() === 
+                                         sampleBudget.category.toLowerCase();
+                    const dateMatch = expenseDate >= startDate && expenseDate <= endDate;
+                    
+                    if (categoryMatch) console.log("Category match found for:", expense.title);
+                    if (dateMatch) console.log("Date match found for:", expense.title);
+                    
+                    return categoryMatch && dateMatch;
+                });
+                
+                console.log("Matching expenses:", matchingExpenses);
+                console.log("Total matching amount:", 
+                    matchingExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0));
+            }
+        }
+    }, [expenses, budgets]);
+
+    // Calculate date ranges based on period, selected month and year
+    const calculateDateRange = (periodType, month, year) => {
+        let startDate, endDate;
+
+        switch(periodType) {
+            case 'monthly':
+                startDate = new Date(year, month, 1);
+                endDate = new Date(year, month + 1, 0);
+                break;
+            case 'quarterly':
+                const quarterStartMonth = Math.floor(month / 3) * 3;
+                startDate = new Date(year, quarterStartMonth, 1);
+                endDate = new Date(year, quarterStartMonth + 3, 0);
+                break;
+            case 'biannual':
+                const halfStartMonth = Math.floor(month / 6) * 6;
+                startDate = new Date(year, halfStartMonth, 1);
+                endDate = new Date(year, halfStartMonth + 6, 0);
+                break;
+            case 'annual':
+                startDate = new Date(year, 0, 1);
+                endDate = new Date(year, 11, 31);
+                break;
+            default:
+                startDate = new Date(year, month, 1);
+                endDate = new Date(year, month + 1, 0);
+        }
+
+        return { startDate, endDate };
+    };
+
+    // Get active period label based on selected month, year and period
+    const getActivePeriodLabel = () => {
+        switch(period) {
+            case 'quarterly':
+                const quarter = Math.floor(selectedMonth / 3) + 1;
+                return `Q${quarter} ${selectedYear}`;
+            case 'biannual':
+                return selectedMonth < 6 ? `H1 ${selectedYear}` : `H2 ${selectedYear}`;
+            case 'annual':
+                return `${selectedYear}`;
+            default:
+                return `${months[selectedMonth]} ${selectedYear}`;
+        }
+    };
+    
+    // Filter budgets by selected month, year, considering their period and active status
+    const filteredBudgets = budgets ? budgets.filter(budget => {
+        // Skip date filtering if dates are not properly set
+        if (!budget.startDate || !budget.endDate) {
+            return true; // Include budgets without date ranges
+        }
+        
+        const budgetStartDate = new Date(budget.startDate);
+        const budgetEndDate = new Date(budget.endDate);
+        const currentDate = new Date(selectedYear, selectedMonth, 15); // Middle of selected month
+        
+        // If showing only active budgets, filter out expired ones
+        if (showActiveOnly) {
+            const now = new Date();
+            if (budgetEndDate < now) {
+                return false;
+            }
+        }
+        
+        // Check if the budget period overlaps with selected month/year
+        return currentDate >= budgetStartDate && currentDate <= budgetEndDate;
+    }) : [];
+
+    // Calculate spent amount for each budget based on matching expenses
+    // 1. First, improve the getBudgetSpent function to handle different periods better:
+
+const getBudgetSpent = (budgetId, budgetCategory, startDate, endDate) => {
+    // Early return if expenses is undefined or empty
+    if (!expenses || expenses.length === 0) {
+      return 0;
+    }
+    
+    // Early return if budget parameters are invalid
+    if (!budgetCategory || !startDate || !endDate) {
+      console.log("Invalid budget parameters:", { budgetId, budgetCategory, startDate, endDate });
+      return 0;
+    }
+    
+    // Make sure startDate and endDate are Date objects
+    const start = startDate instanceof Date ? startDate : new Date(startDate);
+    const end = endDate instanceof Date ? endDate : new Date(endDate);
+    
+    // For the selected period, filter expenses within the appropriate date range
+    const relevantExpenses = expenses.filter(expense => {
+      // Validate expense data
+      if (!expense || !expense.category || !expense.date || !expense.amount) {
+        return false;
+      }
+      
+      // Convert expense date to standard Date object if it's not already
+      let expenseDate = expense.date;
+      if (!(expenseDate instanceof Date)) {
+        try {
+          expenseDate = new Date(expense.date);
+        } catch (e) {
+          return false;
+        }
+      }
+      
+      // Case insensitive category comparison
+      const categoryMatch = expense.category.toLowerCase() === budgetCategory.toLowerCase();
+      
+      // Date range check - only include expenses within the budget period
+      // AND within the selected month/year if filtering by month
+      const dateInRange = expenseDate >= start && expenseDate <= end;
+      
+      // Additional filter for selected month/year if we're viewing specific period
+      if (selectedMonth !== undefined && selectedYear !== undefined) {
+        const viewingDate = new Date(selectedYear, selectedMonth, 15); // Middle of selected month
+        
+        // Check if the budget period is active in the selected month
+        const budgetActiveInSelectedMonth = viewingDate >= start && viewingDate <= end;
+        
+        // For monthly view, we need to check if expense is in the selected month
+        if (period === 'monthly') {
+          const expenseInSelectedMonth = expenseDate.getMonth() === selectedMonth && 
+                                         expenseDate.getFullYear() === selectedYear;
+          return categoryMatch && dateInRange && expenseInSelectedMonth;
+        }
+        
+        // For quarterly view, check if expense is in the selected quarter
+        if (period === 'quarterly') {
+          const expenseQuarter = Math.floor(expenseDate.getMonth() / 3);
+          const selectedQuarter = Math.floor(selectedMonth / 3);
+          const expenseInSelectedQuarter = expenseQuarter === selectedQuarter && 
+                                           expenseDate.getFullYear() === selectedYear;
+          return categoryMatch && dateInRange && expenseInSelectedQuarter;
+        }
+        
+        // For biannual view, check if expense is in the selected half-year
+        if (period === 'biannual') {
+          const expenseHalf = Math.floor(expenseDate.getMonth() / 6);
+          const selectedHalf = Math.floor(selectedMonth / 6);
+          const expenseInSelectedHalf = expenseHalf === selectedHalf && 
+                                        expenseDate.getFullYear() === selectedYear;
+          return categoryMatch && dateInRange && expenseInSelectedHalf;
+        }
+        
+        // For annual view, check if expense is in the selected year
+        if (period === 'annual') {
+          const expenseInSelectedYear = expenseDate.getFullYear() === selectedYear;
+          return categoryMatch && dateInRange && expenseInSelectedYear;
+        }
+      }
+      
+      return categoryMatch && dateInRange;
+    });
+    
+    // Sum up the amounts, ensuring they are numbers
+    const total = relevantExpenses.reduce((total, expense) => {
+      const amount = parseFloat(expense.amount);
+      return isNaN(amount) ? total : total + amount;
+    }, 0);
+    
+    return total;
+  };
+  
+  // 2. Add a new function to generate historical budget data for charts:
+  const generateHistoricalBudgetData = (budget) => {
+    if (!budget || !budget.startDate || !budget.endDate) return [];
+    
+    const startDate = new Date(budget.startDate);
+    const endDate = new Date(budget.endDate);
+    const budgetPeriod = budget.period || 'monthly';
+    
+    const historicalData = [];
+    
+    // Monthly history
+    if (budgetPeriod === 'monthly') {
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const periodStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const periodEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        
+        const spent = getBudgetSpent(
+          budget._id,
+          budget.category,
+          periodStartDate,
+          periodEndDate
+        );
+        
+        historicalData.push({
+          period: `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`,
+          budget: budget.amount,
+          spent: spent,
+          remaining: budget.amount - spent
+        });
+        
+        // Move to next month
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+    } 
+    // Quarterly history
+    else if (budgetPeriod === 'quarterly') {
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const quarter = Math.floor(currentDate.getMonth() / 3);
+        const periodStartDate = new Date(currentDate.getFullYear(), quarter * 3, 1);
+        const periodEndDate = new Date(currentDate.getFullYear(), (quarter + 1) * 3, 0);
+        
+        const spent = getBudgetSpent(
+          budget._id,
+          budget.category,
+          periodStartDate,
+          periodEndDate
+        );
+        
+        historicalData.push({
+          period: `Q${quarter + 1} ${currentDate.getFullYear()}`,
+          budget: budget.amount,
+          spent: spent,
+          remaining: budget.amount - spent
+        });
+        
+        // Move to next quarter
+        currentDate.setMonth(currentDate.getMonth() + 3);
+      }
+    }
+    // Biannual history
+    else if (budgetPeriod === 'biannual') {
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const half = Math.floor(currentDate.getMonth() / 6);
+        const periodStartDate = new Date(currentDate.getFullYear(), half * 6, 1);
+        const periodEndDate = new Date(currentDate.getFullYear(), (half + 1) * 6, 0);
+
+        const spent = getBudgetSpent(
+            budget._id,
+            budget.category,
+            periodStartDate,
+            periodEndDate
+          );
+          
+          historicalData.push({
+            period: `Q${half + 1} ${currentDate.getFullYear()}`,
+            budget: budget.amount,
+            spent: spent,
+            remaining: budget.amount - spent
+          });
+          
+          // Move to next quarter
+          currentDate.setMonth(currentDate.getMonth() + 6);
+        }
+    }
+    else if (budgetPeriod === 'annual') {
+        let currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const full = Math.floor(currentDate.getMonth());
+          const periodStartDate = new Date(currentDate.getFullYear(), full, 1);
+          const periodEndDate = new Date(currentDate.getFullYear(), full, 0);
+  
+          const spent = getBudgetSpent(
+              budget._id,
+              budget.category,
+              periodStartDate,
+              periodEndDate
+            );
+            
+            historicalData.push({
+              period: `Q${full + 1} ${currentDate.getFullYear()}`,
+              budget: budget.amount,
+              spent: spent,
+              remaining: budget.amount - spent
+            });
+            
+            // Move to next quarter
+            currentDate.setMonth(currentDate.getMonth()+12);
+          }
+      }
+  };
+
+
+
+    // Calculate remaining amount
+    const getBudgetRemaining = (budget) => {
+        const { startDate, endDate, amount, category } = budget;
+        const spent = getBudgetSpent(budget._id, category, new Date(startDate), new Date(endDate));
+        return amount - spent;
+    };
+
+    // Check if a budget is expired and needs renewal
+    const isBudgetExpired = (budget) => {
+        const endDate = new Date(budget.endDate);
+        const now = new Date();
+        return endDate < now;
+    };
+
+    // Renew a budget based on its period
+    const renewBudget = (budget) => {
+        const { startDate, endDate, period, ...rest } = budget;
+        
+        // Calculate new date range based on period
+        let newStartDate = new Date(endDate);
+        newStartDate.setDate(newStartDate.getDate() + 1); // Start from the day after end date
+        
+        let newEndDate;
+        switch(period || 'monthly') {
+            case 'monthly':
+                newEndDate = new Date(newStartDate);
+                newEndDate.setMonth(newEndDate.getMonth() + 1);
+                newEndDate.setDate(0); // Last day of the month
+                break;
+            case 'quarterly':
+                newEndDate = new Date(newStartDate);
+                newEndDate.setMonth(newEndDate.getMonth() + 3);
+                newEndDate.setDate(0); // Last day of the month
+                break;
+            case 'biannual':
+                newEndDate = new Date(newStartDate);
+                newEndDate.setMonth(newEndDate.getMonth() + 6);
+                newEndDate.setDate(0); // Last day of the month
+                break;
+            case 'annual':
+                newEndDate = new Date(newStartDate);
+                newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+                newEndDate.setDate(newEndDate.getDate() - 1); // Same day next year, minus 1
+                break;
+            default:
+                newEndDate = new Date(newStartDate);
+                newEndDate.setMonth(newEndDate.getMonth() + 1);
+                newEndDate.setDate(0);
+        }
+        
+        // Create new budget with updated dates
+        const newBudget = {
+            ...rest,
+            startDate: newStartDate.toISOString(),
+            endDate: newEndDate.toISOString(),
+            period: period || 'monthly'
+        };
+        
+        addBudget(newBudget);
+    };
+
+    // Check for expired budgets that need renewal
+    useEffect(() => {
+        if (autoRenewalEnabled && budgets && budgets.length > 0) {
+            budgets.forEach(budget => {
+                if (budget.autoRenew && isBudgetExpired(budget)) {
+                    renewBudget(budget);
+                }
+            });
+        }
+    }, [budgets, autoRenewalEnabled]);
+
+    // Prepare data for budget overview chart
+    const prepareBudgetChartData = () => {
+        return filteredBudgets.map(budget => {
+            const spent = getBudgetSpent(
+                budget._id, 
+                budget.category, 
+                new Date(budget.startDate), 
+                new Date(budget.endDate)
+            );
+            
+            return {
+                name: budget.title,
+                budget: budget.amount,
+                spent: spent
+            };
+        });
+    };
+
+    // Form handling functions
+    const handleInput = (name) => (e) => {
+        setInputState({...inputState, [name]: e.target.value});
+    };
+
+    const handleCheckboxChange = (name) => (e) => {
+        setInputState({...inputState, [name]: e.target.checked});
+    };
+
+    const handleEmojiSelect = (selectedEmoji) => {
+        setInputState({...inputState, emoji: selectedEmoji});
+        setIsEmojiPickerOpen(false);
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        
+        let startDate, endDate;
+        
+        if (useCurrentStartDate) {
+          // Use current month as start date
+          startDate = new Date(selectedYear, selectedMonth, 1);
+        } else {
+          // Use manual start date
+          startDate = new Date(manualStartDate);
+        }
+        
+        if (budgetEndType === 'auto') {
+          // Calculate end date based on period
+          switch (period) {
+            case 'monthly':
+              endDate = new Date(startDate);
+              endDate.setMonth(endDate.getMonth() + 1);
+              endDate.setDate(0); // Last day of the month
+              break;
+            case 'quarterly':
+              endDate = new Date(startDate);
+              endDate.setMonth(endDate.getMonth() + 3);
+              endDate.setDate(0);
+              break;
+            case 'biannual':
+              endDate = new Date(startDate);
+              endDate.setMonth(endDate.getMonth() + 6);
+              endDate.setDate(0);
+              break;
+            case 'annual':
+              endDate = new Date(startDate);
+              endDate.setFullYear(endDate.getFullYear() + 1);
+              endDate.setDate(endDate.getDate() - 1);
+              break;
+            default:
+              endDate = new Date(startDate);
+              endDate.setMonth(endDate.getMonth() + 1);
+              endDate.setDate(0);
+          }
+        } else {
+          // Use specific end date
+          endDate = new Date(manualEndDate);
+        }
+        
+        const budgetData = {
+          ...inputState,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          amount: Number(inputState.amount),
+        };
+        
+        if (isEditMode && currentEditBudget) {
+          // Update existing budget
+          updateBudget(currentEditBudget._id, budgetData);
+        } else {
+          // Add new budget
+          addBudget(budgetData);
+        }
+        console.log("Adding budget with data:", budgetData);
+        
+        // Reset form state
+        setInputState({
+          title: '',
+          amount: '',
+          category: '',
+          emoji: '💰',
+          period: 'monthly',
+          autoRenew: true
+        });
+        
+        setIsFormOpen(false);
+        setIsEditMode(false);
+        setCurrentEditBudget(null);
+        setUseCurrentStartDate(true);
+        setBudgetEndType('auto');
+      };
+      
+    // Edit budget handler
+   // 3. Update handleEditBudget to set the manual dates when editing
+const handleEditBudget = (budget) => {
+    // Determine the period based on the date range
+    const startDate = new Date(budget.startDate);
+    const endDate = new Date(budget.endDate);
+    const diffMonths = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                       endDate.getMonth() - startDate.getMonth() + 
+                       (endDate.getDate() >= startDate.getDate() ? 1 : 0);
+    
+    let periodValue = 'monthly';
+    if (diffMonths >= 12) {
+      periodValue = 'annual';
+    } else if (diffMonths >= 6) {
+      periodValue = 'biannual';
+    } else if (diffMonths >= 3) {
+      periodValue = 'quarterly';
+    }
+  
+    setCurrentEditBudget(budget);
+    setInputState({
+      title: budget.title,
+      amount: budget.amount.toString(),
+      category: budget.category,
+      emoji: budget.emoji || '💰',
+      period: budget.period || periodValue,
+      autoRenew: budget.autoRenew !== undefined ? budget.autoRenew : true
+    });
+    
+    // Set manual dates from the budget
+    setManualStartDate(budget.startDate.split('T')[0]);
+    setManualEndDate(budget.endDate.split('T')[0]);
+    setUseCurrentStartDate(false);
+    setBudgetEndType('specific'); // Default to specific dates when editing
+    
+    setIsFormOpen(true);
+    setIsEditMode(true);
+  };
+
+    // Reset expired budgets
+    const resetExpiredBudgets = () => {
+        if (!budgets) return;
+        
+        budgets.forEach(budget => {
+            if (isBudgetExpired(budget)) {
+                const updatedBudget = {
+                    ...budget,
+                    startDate: new Date().toISOString(),
+                    endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString()
+                };
+                updateBudget(budget._id, updatedBudget);
+            }
+        });
+    };
+
+    // Reset a budget to 0 spent
+    const resetBudget = (budgetId) => {
+        // In a real app, this would mark expenses as "previous period" 
+        // For now, we'll just inform the user
+        const notification = {
+            type: 'info',
+            message: 'Budget reset functionality would clear tracked expenses for this budget'
+        };
+        setNotifications([...notifications, notification]);
+        
+        // Remove notification after 3 seconds
+        setTimeout(() => {
+            setNotifications(notifications => 
+                notifications.filter(n => n.message !== notification.message)
+            );
+        }, 3000);
+    };
+
+    // Effects
+    // In BudgetPage.jsx
+
+    // Add this after you receive the budgets from getBudgets()
+useEffect(() => {
+    if (budgets && budgets.length > 0) {
+      // Make sure each budget has proper startDate and endDate
+      const updatedBudgets = budgets.map(budget => {
+        if (!budget.startDate || !budget.endDate) {
+          // If dates are missing, calculate them based on period and current date
+          const { startDate, endDate } = calculateDateRange(
+            budget.period || 'monthly', 
+            new Date().getMonth(), 
+            new Date().getFullYear()
+          );
+          
+          return {
+            ...budget,
+            startDate: budget.startDate || startDate.toISOString(),
+            endDate: budget.endDate || endDate.toISOString()
+          };
+        }
+        return budget;
+      });
+      
+      // Update the budgets in context if needed
+      if (JSON.stringify(updatedBudgets) !== JSON.stringify(budgets)) {
+        // You might need to create an updateBudgetsArray function in your context
+        // updateBudgetsArray(updatedBudgets);
+        console.log("Budgets needed date updates:", updatedBudgets);
+      }
+    }
+  }, [budgets]);
+
+    // Group budgets by category for summary view
+    const budgetsByCategory = {};
+    if (filteredBudgets.length > 0) {
+        filteredBudgets.forEach(budget => {
+            if (!budgetsByCategory[budget.category]) {
+                budgetsByCategory[budget.category] = {
+                    total: 0,
+                    spent: 0,
+                    budgets: []
+                };
+            }
+            
+            const spent = getBudgetSpent(
+                budget._id, 
+                budget.category, 
+                new Date(budget.startDate), 
+                new Date(budget.endDate)
+            );
+            
+            budgetsByCategory[budget.category].total += budget.amount;
+            budgetsByCategory[budget.category].spent += spent;
+            budgetsByCategory[budget.category].budgets.push(budget);
+        });
+    }
+    console.log("API Budgets:", budgets);
+console.log("Filtered Budgets:", filteredBudgets);
+console.log("Current selection:", selectedMonth, selectedYear);
+    // The return statement for the BudgetPage component
+    return (<>
+      <Sidebar onToggle={setIsSidebarCollapsed} />
+        <div className={`flex-1 p-8 overflow-y-auto transition-all duration-300 ${isSidebarCollapsed ? 'ml-16 ' : 'ml-64 max-w-full'}`}>
+          
+          <main className="flex-1 p-5 overflow-y-auto">
+            <div className="container mx-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-800">Budget Management</h1>
+                
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={showActiveOnly}
+                      onChange={() => setShowActiveOnly(!showActiveOnly)}
+                      className="mr-2 h-4 w-4 text-blue-600"
+                    />
+                    Show active only
+                  </label>
+                  
+                  <label className="flex items-center text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={autoRenewalEnabled}
+                      onChange={() => setAutoRenewalEnabled(!autoRenewalEnabled)}
+                      className="mr-2 h-4 w-4 text-blue-600"
+                    />
+                    Auto-renew budgets
+                  </label>
+                  
+                  <button
+                    onClick={() => setIsFormOpen(true)}
+                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center"
+                  >
+                    <PlusCircle size={18} className="mr-2" />
+                    New Budget
+                  </button>
+                </div>
+              </div>
+              
+              {/* Period selector */}
+              <div className="bg-white rounded-lg shadow p-4 mb-6">
+                <div className="flex flex-wrap items-center justify-between">
+                  <div className="flex items-center space-x-4 mb-2 sm:mb-0">
+                    <label className="font-medium text-gray-700">Period:</label>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      {months.map((month, index) => (
+                        <option key={index} value={index}>{month}</option>
+                      ))}
+                    </select>
+                    
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      {[...Array(5)].map((_, i) => {
+                        const year = new Date().getFullYear() - 2 + i;
+                        return <option key={year} value={year}>{year}</option>;
+                      })}
+                    </select>
+                  </div>
+                  
+                  <div className="flex items-center space-x-4">
+                    <span className="text-lg font-medium text-green-600">
+                      Active Period: {getActivePeriodLabel()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Budget Summary */}
+              <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+                <div className="border-b border-gray-200 p-4">
+                  <h2 className="text-lg font-semibold text-gray-800">Budget Overview</h2>
+                </div>
+                
+                <div className="p-4">
+                  {Object.keys(budgetsByCategory).length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {Object.entries(budgetsByCategory).map(([category, data], index) => {
+                        const percentage = data.total > 0 ? Math.round((data.spent / data.total) * 100) : 0;
+                        const isOverBudget = percentage > 100;
+                        
+                        return (
+                          <div key={index} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <h3 className="font-medium text-gray-700 mb-2">{category}</h3>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm text-gray-500">Spent</span>
+                              <span className="font-medium">₹{data.spent.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm text-gray-500">Budget</span>
+                              <span className="font-medium">₹{data.total.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm text-gray-500">Remaining</span>
+                              <span className={`font-medium ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>
+                                ₹{(data.total - data.spent).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-1">
+                              <div 
+                                className={`h-2.5 rounded-full ${isOverBudget ? 'bg-red-600' : 'bg-green-600'}`}
+                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                              />
+                            </div>
+                            <div className="text-right text-sm text-gray-500">{percentage}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-green-500 mb-4">
+                        <FileText size={32} />
+                      </div>
+                      <p className="text-lg font-medium text-gray-900 mb-1">No budgets found</p>
+                      <p className="text-gray-500 mb-4">Create a budget to track your spending</p>
+                      <button
+                        onClick={() => setIsFormOpen(true)}
+                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md inline-flex items-center"
+                      >
+                        <PlusCircle size={18} className="mr-2" />
+                        Create Budget
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {Object.keys(budgetsByCategory).length > 0 && (
+                  <div className="p-4 border-t border-gray-200">
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={prepareBudgetChartData()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="budget" fill="#4ade80" name="Budget" />
+                          <Bar dataKey="spent" fill="#f87171" name="Spent" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Budget List */}
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-800">All Budgets</h2>
+                  <div className="flex space-x-2">
+                    <select
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setInputState(prev => ({...prev, period: value}));
+                      }}
+                      value={period}
+                      className="border rounded px-2 py-1 text-sm"
+                    >
+                      {periodOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                {filteredBudgets.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-green-500 mb-4">
+                      <FileText size={32} />
+                    </div>
+                    <p className="text-lg font-medium text-gray-900 mb-1">No budgets found</p>
+                    <p className="text-gray-500 mb-4">Create a budget to track your spending</p>
+                    <button
+                      onClick={() => setIsFormOpen(true)}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md inline-flex items-center"
+                    >
+                      <PlusCircle size={18} className="mr-2" />
+                      Create Budget
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Budget</th>
+                          <th className="px-4 py-3 text-left">Category</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3 text-right">Spent</th>
+                          <th className="px-4 py-3 text-right">Remaining</th>
+                          <th className="px-4 py-3 text-center">Progress</th>
+                          <th className="px-4 py-3 text-center">Period</th>
+                          <th className="px-4 py-3 text-center">Auto-Renew</th>
+                          <th className="px-4 py-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {filteredBudgets.map((budget) => {
+                          const spent = getBudgetSpent(
+                            budget._id, 
+                            budget.category, 
+                            new Date(budget.startDate), 
+                            new Date(budget.endDate)
+                          );
+                          const remaining = budget.amount - spent;
+                          const percentage = Math.round((spent / budget.amount) * 100);
+                          const isOverBudget = percentage > 100;
+                          
+                          return (
+                            <tr key={budget._id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center">
+                                  <div className="mr-3 text-xl">{budget.emoji}</div>
+                                  <div className="font-medium text-gray-900">{budget.title}</div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-800">{budget.category}</td>
+                              <td className="px-4 py-3 text-right font-medium">₹{budget.amount.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-right">₹{spent.toFixed(2)}</td>
+                              <td className={`px-4 py-3 text-right font-medium ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>
+                                ₹{remaining.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center">
+                                  <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                    <div 
+                                      className={`h-2.5 rounded-full ${isOverBudget ? 'bg-red-600' : 'bg-green-600'}`}
+                                      style={{ width: `${Math.min(percentage, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-gray-500 text-sm min-w-[40px]">{percentage}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center text-sm">
+                                {budget.period || 'monthly'}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {budget.autoRenew ? 
+                                  <CheckCircle size={16} className="inline text-green-500" /> : 
+                                  <X size={16} className="inline text-red-500" />
+                                }
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex justify-center space-x-2">
+                                  <button 
+                                    onClick={() => handleEditBudget(budget)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                  >
+                                    <Edit2 size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => resetBudget(budget._id)}
+                                    className="text-amber-600 hover:text-amber-800"
+                                  >
+                                    <Clock size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      if (window.confirm("Are you sure you want to delete this budget?")) {
+                                        deleteBudget(budget._id);
+                                      }
+                                    }}
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              
+              {/* Budget Form Modal */}
+              {isFormOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+                    <div className="flex justify-between items-center border-b p-4">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {isEditMode ? 'Edit Budget' : 'Create New Budget'}
+                      </h3>
+                      <button 
+                        onClick={() => {
+                          setIsFormOpen(false);
+                          setIsEditMode(false);
+                          setCurrentEditBudget(null);
+                          setInputState({
+                            title: '',
+                            amount: '',
+                            category: '',
+                            emoji: '💰',
+                            period: 'monthly',
+                            autoRenew: true
+                          });
+                        }}
+                        className="text-gray-400 hover:text-gray-500"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    
+                    <form onSubmit={handleSubmit} className="p-4">
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-1">Budget Title</label>
+                        <input
+                          type="text"
+                          name="title"
+                          value={title}
+                          onChange={handleInput('title')}
+                          placeholder="e.g., Groceries, Transportation"
+                          required
+                          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-1">Category</label>
+                        <select
+                          name="category"
+                          value={category}
+                          onChange={handleInput('category')}
+                          required
+                          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          <option value="">Select a category</option>
+                          {categoryOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-1">Budget Amount (₹)</label>
+                        <input
+                          type="number"
+                          name="amount"
+                          value={amount}
+                          onChange={handleInput('amount')}
+                          placeholder="Enter amount"
+                          min="1"
+                          required
+                          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-1">Icon</label>
+                        <div className="flex space-x-2 items-center">
+                          <button
+                            type="button"
+                            onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+                            className="flex items-center justify-center w-10 h-10 text-2xl border rounded hover:bg-gray-100"
+                          >
+                            {emoji}
+                          </button>
+                          <span className="text-gray-500 text-sm">Click to change icon</span>
+                        </div>
+                        
+                        {isEmojiPickerOpen && (
+                          <div className="mt-2">
+                            <EmojiPicker onSelect={handleEmojiSelect} />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-1">Budget Period</label>
+                        <select
+                          name="period"
+                          value={period}
+                          onChange={handleInput('period')}
+                          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          {periodOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="mb-6">
+                        <label className="flex items-center text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={autoRenew}
+                            onChange={handleCheckboxChange('autoRenew')}
+                            className="mr-2 h-4 w-4 text-green-600"
+                          />
+                          Auto-renew this budget when it expires
+                        </label>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-2">Start Date</label>
+                        <div className="space-y-2">
+                            <label className="flex items-center text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={useCurrentStartDate}
+                                onChange={() => setUseCurrentStartDate(!useCurrentStartDate)}
+                                className="mr-2 h-4 w-4 text-green-600"
+                            />
+                            Start from current month ({months[selectedMonth]} {selectedYear})
+                            </label>
+                            
+                            {!useCurrentStartDate && (
+                            <input
+                                type="date"
+                                value={manualStartDate}
+                                onChange={(e) => setManualStartDate(e.target.value)}
+                                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            )}
+                        </div>
+                        </div>
+
+                        <div className="mb-4">
+                        <label className="block text-gray-700 mb-2">End Date</label>
+                        <div className="space-y-2">
+                            <div className="flex items-center">
+                            <input
+                                type="radio"
+                                id="auto-end"
+                                name="end-date-type"
+                                value="auto"
+                                checked={budgetEndType === 'auto'}
+                                onChange={() => setBudgetEndType('auto')}
+                                className="mr-2 h-4 w-4 text-green-600"
+                            />
+                            <label htmlFor="auto-end" className="text-gray-700">
+                                End based on period ({period})
+                            </label>
+                            </div>
+                            
+                            <div className="flex items-center">
+                            <input
+                                type="radio"
+                                id="specific-end"
+                                name="end-date-type"
+                                value="specific"
+                                checked={budgetEndType === 'specific'}
+                                onChange={() => setBudgetEndType('specific')}
+                                className="mr-2 h-4 w-4 text-green-600"
+                            />
+                            <label htmlFor="specific-end" className="text-gray-700">
+                                Specify end date
+                            </label>
+                            </div>
+                            
+                            {budgetEndType === 'specific' && (
+                            <input
+                                type="date"
+                                value={manualEndDate}
+                                onChange={(e) => setManualEndDate(e.target.value)}
+                                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            )}
+                        </div>
+                        </div>
+                      <div className="flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsFormOpen(false);
+                            setIsEditMode(false);
+                            setCurrentEditBudget(null);
+                          }}
+                          className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                        >
+                          {isEditMode ? 'Update Budget' : 'Create Budget'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+              
+              {/* Notifications */}
+              {notifications.length > 0 && (
+                <div className="fixed bottom-4 right-4 z-40 space-y-2">
+                  {notifications.map((notification, index) => (
+                    <div 
+                      key={index}
+                      className={`p-3 rounded-lg shadow-lg max-w-xs ${
+                        notification.type === 'overdue' ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'
+                      }`}
+                    >
+                      <p>{notification.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+      </>);
+};
+
+export default BudgetPage;

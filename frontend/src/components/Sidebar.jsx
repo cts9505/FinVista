@@ -77,7 +77,8 @@ const Sidebar = ({ onToggle }) => {
     { icon: <ReceiptText size={24} />, label: "Bills", path: "/bills" },
     { icon: <Crown size={24} />, label: "Upgrade", path: "/upgrade" },
     // Add more items to test scrolling
-    { icon: <Receipt size={24} />, label: "Reports", path: "/reports" },
+    // { icon: <Receipt size={24} />, label: "Reports", path: "/reports" },
+    { icon: <Receipt size={24} />, label: "Reports", path: "/transaction-upload" },
     { icon: <MessagesSquare size={24} />, label: "AI Assistant", path: "/chat" },
     { icon: <User size={24} />, label: "Accounts", path: "/profile" },
   ];
@@ -123,7 +124,7 @@ const Sidebar = ({ onToggle }) => {
     >
       {/* Sidebar Header */}
       <div className="p-4 flex items-center justify-between">
-        {isExpanded && <h4 className="text-lg font-semibold text-gray-700" ><img onClick={HomeNavigate} className="h-12" src={assets.logo} alt="Finance Management" /></h4>}
+        {isExpanded && <h4 className="text-lg font-semibold text-gray-700" ><img onClick={HomeNavigate} className="h-12" src={assets.logo} alt="FinVista" /></h4>}
         <button 
           className="p-2 rounded-lg hover:bg-gray-100 transition"
           onClick={toggleSidebar} 

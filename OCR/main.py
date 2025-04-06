@@ -94,7 +94,7 @@ def prep_image(image_path):
 def extract_text_from_image(image_file, prompt):
     """Extract text from image using Google Gemini"""
     try:
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name="gemini-1.5-pro")
         response = model.generate_content([image_file, prompt])
         return response.text
     except Exception as e:
