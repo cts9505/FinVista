@@ -41,13 +41,23 @@ Create a `.env` file in `/backend` and `/python-backend` using the template belo
 
 ```dotenv
 # Backend (.env)
-PORT=5000
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_email_password
+PORT=
+MONGO_URL=
+JWT_KEY=
+NODE_ENV=
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+SENDER_EMAIL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+JWT_SECRET=
+JWT_TIMEOUT=
+GOOGLE_API_KEY=
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+API_KEY=
 
 # Python backend (.env)
 API_KEY=your_gemini_api_key
